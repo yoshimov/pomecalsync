@@ -18,20 +18,27 @@ class PCSDialog:
         self.dialog = root
 #        root.attributes("-topmost", True)
         root.title("PomeCalSync")
-#        root.geometry("600x480")
         root.resizable(0, 0)
-        label = tk.Label(root, text="PomeCalSync")
-        label.pack()
+        # log area
         text = tkinter.scrolledtext.ScrolledText(root, bg='white', height=20)
-        text.place(x=10, y=10)
+        text.pack(anchor=tk.CENTER, padx = 10)
         self.log = text
-        text.pack()
-        self.listbox = tk.Listbox(root, selectmode='single', height=4)
-        self.listbox.pack()
-        start_button = tk.Button(root, text="Sync", command=lambda: self.start())
-        start_button.pack()
-        cancel_button = tk.Button(root, text="Cancel", command=lambda: self.cancel())
-        cancel_button.pack()
+        frame = tk.Frame(root)
+        frame.pack(anchor=tk.CENTER, pady = 10)
+        # calendar list
+        label = tk.Label(frame, text='Google Calendars:')
+        label.pack(side=tk.LEFT)
+        self.listbox = tk.Listbox(frame, selectmode='single', height=4)
+        self.listbox.pack(side=tk.LEFT)
+        bar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=self.listbox.yview)
+        bar.pack(side=tk.LEFT, fill=tk.Y)
+        frame = tk.Frame(root)
+        frame.pack(anchor=tk.CENTER, pady=10)
+        # buttons
+        start_button = tk.Button(frame, text="Start Sync", command=lambda: self.start())
+        start_button.pack(side=tk.LEFT, padx = 10)
+        cancel_button = tk.Button(frame, text="Cancel/Finish", command=lambda: self.cancel())
+        cancel_button.pack(side=tk.LEFT, padx = 10)
 
     def set_control(self, control):
         self.control = control
