@@ -8,6 +8,11 @@ PomeCalSync
 
 　動作確認はDM100で行っています。
 
+## 動作環境
+
+- Windows 10 (2004)
+- Pomera DM100
+
 ## インストール
 
 　以下の場所からダウンロードしたpomecalsync.exeを適当なフォルダに置いて
@@ -39,6 +44,7 @@ PomeCalSync
 
 　以下のコマンドで実行ファイルを作成できます。
 
+> python setup.py
 > pyinstaller main.spec
 
 ## ライセンス
