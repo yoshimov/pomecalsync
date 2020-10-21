@@ -95,16 +95,20 @@ class PCSControl:
         if not year or not month or not day:
             self.msg('fail to parse date format.')
             return
-        date = datetime.date(year, month, day)
-        if date > self.after_date:
-            self.msg('skip the memo')
+        if datetime.date(year, month, day) > self.after_date:
+            self.msg('skip the memo.')
             return
         with open(file, mode='r', encoding='Shift_JIS') as f:
             memo = f.read()
-        if memo:
-            self.cal.create_memo(self.calendar_id, year, month, day, memo)
-        else:
-            self.msg('fail to read memo.')
+        try:
+            if memo:
+                self.cal.create_memo(self.calendar_id, year, month, day, memo)
+            else:
+                self.msg('fail to read memo.')
+                return
+        except:
+            self.msg('fail to create calendar memo.')
+            return
         self.tk.after(100, self.delete_memo_file, file)
 
     def delete_memo_file(self, file):
