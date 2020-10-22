@@ -4,3 +4,4 @@ pcsconfig.yml
 __pycache__
 dist
 build
+googlecredential.py
