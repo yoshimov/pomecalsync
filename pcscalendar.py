@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import string
 import time
 import httplib2
 from apiclient.discovery import build
@@ -39,20 +40,23 @@ class PCSCalendar:
             self.credentials.authorize(http)
             self.service = build('calendar', 'v3', http=http)
 
-    def has_credentials(self):
+    def has_credentials(self) -> bool:
         return self.credentials
 
-    def get_calendars(self):
+    def get_calendars(self) -> list:
         self.log.msg('getting calendar list.')
         calendars = self.service.calendarList().list().execute()
 # for debug
 #        for calendar in calendars['items']:
 #            print(calendar)
-        return calendars['items']
+        if calendars:
+            return calendars['items']
+        else:
+            return None
 
-    def create_memo(self, id, year, month, day, memo):
-        date = "{:02}-{:02}-{:02}".format(year, month, day)
-        self.log.msg('creating memo %s' % date)
+    def create_memo(self, id: string, year: int, month: int, day: int, memo: string):
+        date = f'{year:04}-{month:02}-{day:02}'
+        self.log.msg(f'creating memo {date}')
         event = {'start': {'date': date}, 'end': {'date': date},
             'summary': 'memo', 'description': memo}
         event = self.service.events().insert(calendarId=id, body=event).execute()

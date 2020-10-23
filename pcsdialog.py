@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import string
 import tkinter as tk
 import tkinter.scrolledtext
 import sys
@@ -58,17 +59,15 @@ class PCSDialog:
         """
         self.dialog.mainloop()
 
-    def append(self, text):
+    def append(self, text: string):
         # append log
         self.log.insert(tk.END, text + '\n')
         # scroll to end
         self.log.see("end")
-#        self.log.pack()
-        print('append ' + text)
+#        print('append ' + text)
 
-    def set_calendar_list(self, list):
+    def set_calendar_list(self, list: list):
         self.calendar_list = list
-#        self.listbox.delete()
         for item in list:
             self.listbox.insert(tk.END, item['summary'])
 
@@ -81,7 +80,7 @@ class PCSDialog:
         self.listbox.select_set(index)
         self.listbox.see(index)
 
-    def get_selected_calendar(self):
+    def get_selected_calendar(self) -> string:
         index = 0
         for item in self.calendar_list:
             if self.listbox.selection_includes(index):
