@@ -25,16 +25,21 @@ class PCSControl:
 
     def set_config(self, config: PCSConfig):
         self.config = config
-        self.tk.after(100, self.config.load)
+        self.tk.after(10, self.load_config)
+
+    def load_config(self):
+        self.config.load()
+        self.dialog.set_delete_memo(self.config.get('delete_memo', True))
+        self.dialog.set_days(self.config.get('keep_days', 3))
 
     def set_cal(self, cal: PCSCalendar):
         self.cal = cal
-        self.tk.after(200, self.get_credentials)
+        self.tk.after(10, self.get_credentials)
 
     def get_credentials(self):
         self.cal.get_credentials()
         if self.cal.has_credentials:
-            self.tk.after(100, self.get_calendars)
+            self.tk.after(10, self.get_calendars)
         else:
             self.log.msg('fail to get credentials.')
 
@@ -45,7 +50,7 @@ class PCSControl:
             sid = self.config.get('selected_calendar')
             if sid:
                 self.msg('selected calendar id: %s' % sid)
-                self.tk.after(100, self.dialog.select_calendar, sid)
+                self.tk.after(10, self.dialog.select_calendar, sid)
         else:
             self.msg('fail to get calendar list.')
 
@@ -62,9 +67,10 @@ class PCSControl:
             self.msg('please select calendar.')
             return
         # check config
-        days = self.config.get('keep_days', 3)
+        self.config.set('keep_days', days := self.dialog.get_days())
+        self.config.set('delete_memo', self.dialog.get_delete_memo())
         self.after_date = datetime.date.today() - datetime.timedelta(days=days)
-        self.tk.after(100, self.scan_files)
+        self.tk.after(10, self.scan_files)
 
     def scan_files(self):
         available_drives = [f'{d}:' for d in string.ascii_uppercase if os.path.exists(f'{d}:')]
@@ -77,7 +83,7 @@ class PCSControl:
         if pdrive:
             memo_files = glob.glob(f'{pdrive}/Pomera_memo/**/*.txt')
             for file in memo_files:
-                self.tk.after(100, self.sync_calendar_memo, file)
+                self.tk.after(10, self.sync_calendar_memo, file)
         else:
             self.msg('Pomera not found.')
 
@@ -110,10 +116,10 @@ class PCSControl:
         except:
             self.msg('fail to create calendar memo.')
             return
-        self.tk.after(100, self.delete_memo_file, file)
+        self.tk.after(10, self.delete_memo_file, file)
 
     def delete_memo_file(self, file: string):
-        if self.config.get('delete_memo', True):
+        if self.config.get('delete_memo'):
             self.msg(f'removing file: {file}')
             os.remove(file)
         else:

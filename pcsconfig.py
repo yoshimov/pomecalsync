@@ -13,7 +13,7 @@ class PCSConfig:
 
     def __init__(self, log):
         self.log = log
-    
+
     def load(self):
         if os.path.exists(self.filename):
             self.log.msg('loading config file')
@@ -31,8 +31,9 @@ class PCSConfig:
         return None
 
     def set(self, name: string, value):
-        self.config[name] = value
-        self.save()
+        if not name in self.config or self.config[name] != value:
+            self.config[name] = value
+            self.save()
 
     def save(self):
         with open(self.filename, mode='w', encoding='utf-8') as yml:
