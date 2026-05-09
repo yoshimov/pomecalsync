@@ -2,7 +2,14 @@ google-calendar.dat
 pcsconfig.yml
 *.code-workspace
 __pycache__
-dist
-build
+dist/
+build/
 googlecredential.py
 pomecalsync.egg-info
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/

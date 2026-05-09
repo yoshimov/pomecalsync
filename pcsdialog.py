@@ -83,6 +83,7 @@ class PCSDialog:
         self.log.insert(tk.END, text + '\n')
         # scroll to end
         self.log.see("end")
+        self.log.update_idletasks()
 #        print('append ' + text)
 
     def set_calendar_list(self, list: list):
