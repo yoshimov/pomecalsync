@@ -9,13 +9,75 @@ from pcsdialog import PCSDialog
 
 FUSEN_STR = '★付箋文★'
 
+class PCSFlow:
+    """
+    PCSControl の各処理ステップを外側から順番に実行する。
+    各ステップの実行後、PCSControl の状態を見て次の処理を判断する。
+    """
+    def __init__(self, tk, control, delay=10):
+        self.tk = tk
+        self.control = control
+        self.delay = delay
+
+    def schedule(self, step, *args):
+        self.tk.after(self.delay, step, *args)
+
+    def initialize(self):
+        self.schedule(self._load_config)
+
+    def _load_config(self):
+        self.control.load_config()
+        self.schedule(self._get_credentials)
+
+    def _get_credentials(self):
+        self.control.get_credentials()
+        if self.control.has_credentials():
+            self.schedule(self._get_calendars)
+
+    def _get_calendars(self):
+        self.control.get_calendars()
+
+    def start_sync(self):
+        self.schedule(self._prepare_sync)
+
+    def _prepare_sync(self):
+        self.control.prepare_sync()
+        if self.control.is_sync_ready():
+            self.schedule(self._scan_files)
+
+    def _scan_files(self):
+        self.control.scan_files()
+        if self.control.has_scanned_files():
+            self.schedule(self._sync_next_memo)
+
+    def _sync_next_memo(self):
+        self.control.prepare_next_memo()
+        if self.control.has_current_memo():
+            self.schedule(self._sync_calendar_memo)
+        else:
+            self.control.msg('finished sync.')
+
+    def _sync_calendar_memo(self):
+        self.control.sync_calendar_memo()
+        if self.control.should_delete_current_memo():
+            self.schedule(self._delete_memo_file)
+        else:
+            self.schedule(self._sync_next_memo)
+
+    def _delete_memo_file(self):
+        self.control.delete_current_memo_file()
+        self.schedule(self._sync_next_memo)
+
 class PCSControl:
     tk = None
     dialog = None
     config = None
     cal = None
+    flow = None
     calendar_id = None
     memo_files = None
+    current_memo_file = None
+    calendar_memo_created = False
     after_date = None
 
     def __init__(self, dialog: PCSDialog):
@@ -26,12 +88,17 @@ class PCSControl:
         self.tk = self.dialog.get_tk()
         self.dialog.set_control(self)
 
+    def set_flow(self, flow: PCSFlow):
+        """
+        処理の進行を担当する外側のフロー実行器を登録する。
+        """
+        self.flow = flow
+
     def set_config(self, config: PCSConfig):
         """
-        設定管理オブジェクトを登録し、Tk のイベントループ開始後に設定を読み込む。
+        設定管理オブジェクトを登録する。
         """
         self.config = config
-        self.tk.after(10, self.load_config)
 
     def load_config(self):
         """
@@ -43,20 +110,23 @@ class PCSControl:
 
     def set_cal(self, cal: PCSCalendar):
         """
-        Google Calendar 操作用オブジェクトを登録し、認証処理を開始する。
+        Google Calendar 操作用オブジェクトを登録する。
         """
         self.cal = cal
-        self.tk.after(10, self.get_credentials)
 
     def get_credentials(self):
         """
-        Google Calendar API の認証情報を取得し、成功したらカレンダー一覧取得へ進む。
+        Google Calendar API の認証情報を取得する。
         """
         self.cal.get_credentials()
-        if self.cal.has_credentials:
-            self.tk.after(10, self.get_calendars)
-        else:
-            self.log.msg('fail to get credentials.')
+        if not self.has_credentials():
+            self.msg('fail to get credentials.')
+
+    def has_credentials(self):
+        """
+        Google Calendar API の認証情報を取得済みかを返す。
+        """
+        return self.cal.has_credentials()
 
     def get_calendars(self):
         """
@@ -68,11 +138,11 @@ class PCSControl:
             sid = self.config.get('selected_calendar')
             if sid:
                 self.msg('selected calendar id: %s' % sid)
-                self.tk.after(10, self.dialog.select_calendar, sid)
+                self.dialog.select_calendar(sid)
         else:
             self.msg('fail to get calendar list.')
 
-    def config(self):
+    def open_config(self):
         """
         将来の設定画面用に残されているプレースホルダー。
         """
@@ -81,7 +151,13 @@ class PCSControl:
     # start sync with google calendar
     def sync(self):
         """
-        画面の選択内容と設定値を保存し、Pomera メモの同期処理を開始する。
+        UI から同期を開始する。
+        """
+        self.flow.start_sync()
+
+    def prepare_sync(self):
+        """
+        画面の選択内容と設定値を保存する。
         """
         self.msg('starting sync with google calendar.')
         self.calendar_id = self.dialog.get_selected_calendar()
@@ -94,12 +170,18 @@ class PCSControl:
         self.config.set('keep_days', days := self.dialog.get_days())
         self.config.set('delete_memo', self.dialog.get_delete_memo())
         self.after_date = datetime.date.today() - datetime.timedelta(days=days)
-        self.tk.after(10, self.scan_files)
+
+    def is_sync_ready(self):
+        """
+        同期開始に必要な情報が揃っているかを返す。
+        """
+        return bool(self.calendar_id)
 
     def scan_files(self):
         """
         接続されているドライブから Pomera_memo フォルダを探し、同期対象ファイルを集める。
         """
+        self.memo_files = None
         available_drives = [f'{d}:' for d in string.ascii_uppercase if os.path.exists(f'{d}:')]
         # scan pomera memo folder
         pdrive = None
@@ -109,33 +191,40 @@ class PCSControl:
                 pdrive = d
         if pdrive:
             self.memo_files = glob.glob(f'{pdrive}/Pomera_memo/**/*.txt', recursive=True)
-            self.tk.after(10, self.sync_next_memo)
         else:
             self.msg('Pomera not found.')
 
-    def sync_next_memo(self):
+    def has_scanned_files(self):
         """
-        同期対象のメモを1件取り出して処理する。残りがなければ同期完了を通知する。
+        Pomera_memo フォルダのスキャンが終わっているかを返す。
         """
+        return self.memo_files is not None
+
+    def prepare_next_memo(self):
+        """
+        同期対象のメモを1件取り出し、現在処理中のメモとして保持する。
+        """
+        self.current_memo_file = None
+        self.calendar_memo_created = False
         if not self.memo_files:
-            self.msg('finished sync.')
             return
-        self.sync_calendar_memo(self.memo_files.pop(0))
+        self.current_memo_file = self.memo_files.pop(0)
 
-    def finish_current_memo(self):
+    def has_current_memo(self):
         """
-        現在のメモ処理を終え、Tk の再描画を挟んで次のメモ処理を予約する。
+        現在処理中のメモがあるかを返す。
         """
-        self.tk.after(10, self.sync_next_memo)
+        return bool(self.current_memo_file)
 
-    def sync_calendar_memo(self, file: string):
+    def sync_calendar_memo(self):
         """
         メモファイル名から日付を読み取り、条件に合うメモを Google Calendar に登録する。
         """
+        self.calendar_memo_created = False
+        file = self.current_memo_file
         match = re.search(r'[\\\/](\d{4})(\d{2})(\d{2})\.txt$', file)
         if not match:
             self.msg(f'skip file: {file}')
-            self.finish_current_memo()
             return
         self.msg(f'found memo file: {file}')
         year = int(match.group(1))
@@ -143,35 +232,37 @@ class PCSControl:
         day = int(match.group(3))
         if not year or not month or not day:
             self.msg('fail to parse date format.')
-            self.finish_current_memo()
             return
         if datetime.date(year, month, day) > self.after_date:
             self.msg('skip the recent memo.')
-            self.finish_current_memo()
             return
         with open(file, mode='r', encoding='Shift_JIS') as f:
             memo = f.read()
         if not memo:
             self.msg('fail to read memo.')
-            self.finish_current_memo()
             return
         # skip the memo start with fusen string
         if memo.startswith(FUSEN_STR):
             self.msg('skip the memo starts with fusen.')
-            self.finish_current_memo()
             return
         try:
             self.cal.create_memo(self.calendar_id, year, month, day, memo)
         except:
             self.msg('fail to create calendar memo.')
-            self.finish_current_memo()
             return
-        self.tk.after(10, self.delete_memo_file, file)
+        self.calendar_memo_created = True
 
-    def delete_memo_file(self, file: string):
+    def should_delete_current_memo(self):
+        """
+        現在のメモがカレンダーへ登録済みで、同期済み処理へ進めるかを返す。
+        """
+        return self.calendar_memo_created
+
+    def delete_current_memo_file(self):
         """
         同期済みメモを設定に応じて削除するか、付箋マークを追加して同期済みにする。
         """
+        file = self.current_memo_file
         if self.config.get('delete_memo'):
             self.msg(f'removing file: {file}')
             os.remove(file)
@@ -181,7 +272,8 @@ class PCSControl:
                 content = f.read()
             with open(file, mode='w', encoding='Shift_JIS') as f:
                 f.write(f'{FUSEN_STR}\n{content}')
-        self.finish_current_memo()
+        self.current_memo_file = None
+        self.calendar_memo_created = False
 
     def finish(self):
         """
@@ -206,6 +298,9 @@ def main():
     control.set_config(config)
     cal = PCSCalendar(control)
     control.set_cal(cal)
+    flow = PCSFlow(dialog.get_tk(), control)
+    control.set_flow(flow)
+    flow.initialize()
     dialog.show()
 
 if __name__ == "__main__":

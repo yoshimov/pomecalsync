@@ -1,0 +1,194 @@
+PomeCalSync Pythonプログラム生成プロンプト集
+作成日: 2026-05-09
+更新日: 2026-05-09
+
+このファイルは、PomeCalSyncを構成する各Pythonプログラムを再生成するためのプロンプト集です。
+Google APIのclient_id/client_secretなどの秘密情報は直接書かず、プレースホルダーを使ってください。
+
+================================================================================
+1. main.py
+================================================================================
+
+以下の仕様で、PythonのGUIアプリケーション本体 `main.py` を作成してください。
+
+- shebangとUTF-8 codingコメントを先頭に入れる。
+- 標準ライブラリとして `os`, `glob`, `string`, `re`, `sys`, `datetime` を使う。
+- ローカルモジュールとして `PCSCalendar` を `pcscalendar` から、`PCSConfig` を `pcsconfig` から、`PCSDialog` を `pcsdialog` からインポートする。
+- 定数 `FUSEN_STR = '★付箋文★'` を定義する。
+- `PCSFlow` クラスを実装し、`PCSControl` の各処理ステップをTkinterの `after` で順番に実行する外側のフロー実行器にする。
+- `PCSFlow.__init__(tk, control, delay=10)` では、Tkオブジェクト、制御オブジェクト、遅延ミリ秒を保持する。
+- `PCSFlow.schedule(step, *args)` は `tk.after(delay, step, *args)` を呼ぶ。
+- `PCSFlow.initialize()` は設定読み込みステップ `_load_config()` を予約する。
+- `_load_config()` は `control.load_config()` を呼び、その後 `_get_credentials()` を予約する。
+- `_get_credentials()` は `control.get_credentials()` を呼び、`control.has_credentials()` がTrueなら `_get_calendars()` を予約する。
+- `_get_calendars()` は `control.get_calendars()` を呼ぶ。
+- `start_sync()` は `_prepare_sync()` を予約する。
+- `_prepare_sync()` は `control.prepare_sync()` を呼び、`control.is_sync_ready()` がTrueなら `_scan_files()` を予約する。
+- `_scan_files()` は `control.scan_files()` を呼び、`control.has_scanned_files()` がTrueなら `_sync_next_memo()` を予約する。
+- `_sync_next_memo()` は `control.prepare_next_memo()` を呼ぶ。`control.has_current_memo()` がTrueなら `_sync_calendar_memo()` を予約し、Falseなら `finished sync.` とログ出力する。
+- `_sync_calendar_memo()` は `control.sync_calendar_memo()` を呼ぶ。`control.should_delete_current_memo()` がTrueなら `_delete_memo_file()` を予約し、Falseなら `_sync_next_memo()` を予約する。
+- `_delete_memo_file()` は `control.delete_current_memo_file()` を呼び、その後 `_sync_next_memo()` を予約する。
+- `PCSControl` クラスを実装し、Tkinter UI、設定管理、Google Calendar操作をつなぐ制御クラスにする。
+- `PCSControl.__init__(dialog)` では、ダイアログを保持し、`dialog.get_tk()` でTkオブジェクトを取得し、`dialog.set_control(self)` を呼ぶ。
+- `PCSControl` は `tk`, `dialog`, `config`, `cal`, `flow`, `calendar_id`, `memo_files`, `current_memo_file`, `calendar_memo_created`, `after_date` を状態として持つ。
+- `set_flow(flow)` では、処理の進行を担当する `PCSFlow` インスタンスを保持する。
+- `set_config(config)` では設定管理オブジェクトを保持する。ここでは `after` 予約を行わない。
+- `load_config()` では `config.load()` を呼び、`delete_memo` はデフォルトTrue、`keep_days` はデフォルト3としてUIへ反映する。
+- `set_cal(cal)` ではGoogle Calendar操作オブジェクトを保持する。ここでは `after` 予約を行わない。
+- `get_credentials()` では `cal.get_credentials()` を呼び、認証情報がなければログへ `fail to get credentials.` と出す。
+- `has_credentials()` は `cal.has_credentials()` の結果を返す。
+- `get_calendars()` では認証済みならカレンダー一覧を取得し、UIのリストへ設定する。設定に `selected_calendar` があれば、そのIDをログ出力してUIで選択する。
+- `open_config()` は将来の設定画面用プレースホルダーとして `pass` のまま残す。
+- `sync()` はUIから呼ばれる同期開始メソッドとし、`flow.start_sync()` を呼ぶ。
+- `prepare_sync()` では同期開始ログを出し、選択されたカレンダーIDを取得する。未選択ならログを出して終了する。選択済みなら `selected_calendar`, `keep_days`, `delete_memo` を設定へ保存し、今日から `keep_days` 日前の日付を `after_date` として計算する。
+- `is_sync_ready()` は同期開始に必要なカレンダーIDがあるかをboolで返す。
+- `scan_files()` では、まず `memo_files` を `None` に戻す。AからZまでのWindowsドライブを調べ、直下に `Pomera_memo` フォルダがあるドライブを探す。見つかったら `Pomera_memo/**/*.txt` を再帰的に列挙して `memo_files` に保持し、見つからなければログへ `Pomera not found.` と出す。
+- `has_scanned_files()` は `memo_files is not None` を返し、フォルダスキャンが完了したかを示す。
+- `prepare_next_memo()` では、`current_memo_file` を `None`、`calendar_memo_created` をFalseに戻す。対象ファイルがあれば先頭の1件を取り出して `current_memo_file` に保持する。
+- `has_current_memo()` は現在処理中のメモファイルがあるかをboolで返す。
+- `sync_calendar_memo()` では、`current_memo_file` を対象にする。最初に `calendar_memo_created` をFalseに戻し、ファイルパス末尾が `YYYYMMDD.txt` 形式か正規表現で判定し、年/月/日を取り出す。形式が違う場合、日付解析に失敗した場合、対象日が `after_date` より新しい場合、Shift_JISで読んだ本文が空の場合、先頭が `FUSEN_STR` の場合はログを出して戻る。
+- メモ本文が有効なら `cal.create_memo(calendar_id, year, month, day, memo)` を呼んでGoogle Calendarに終日イベントとして登録する。失敗時はログを出して戻る。
+- 登録成功後は `calendar_memo_created` をTrueにする。`sync_calendar_memo()` 自体は次処理の予約を行わず、判断は `PCSFlow` に任せる。
+- `should_delete_current_memo()` は、現在のメモがカレンダーへ登録済みで同期済み処理へ進めるかを返す。
+- `delete_current_memo_file()` では、`current_memo_file` を対象にする。設定 `delete_memo` がTrueならファイルを削除し、FalseならShift_JISで読み直して先頭に `FUSEN_STR` と改行を付けて書き戻す。最後に `current_memo_file` を `None`、`calendar_memo_created` をFalseに戻す。
+- `finish()` は `sys.exit(0)` でアプリケーションを終了する。
+- `msg(text)` はダイアログのログ欄へ `dialog.append(text)` で追加する。
+- `main()` では `PCSDialog`, `PCSControl`, `PCSConfig`, `PCSCalendar`, `PCSFlow` を生成して相互に接続する。`flow = PCSFlow(dialog.get_tk(), control)` を作成し、`control.set_flow(flow)` で登録したあと、`flow.initialize()` を呼んでから `dialog.show()` を呼ぶ。
+- `if __name__ == "__main__": main()` を入れる。
+
+================================================================================
+2. pcscalendar.py
+================================================================================
+
+以下の仕様で、Google Calendar API連携モジュール `pcscalendar.py` を作成してください。
+
+- shebangとUTF-8 codingコメントを先頭に入れる。
+- `importlib`, `importlib.util`, `os`, `string`, `sys`, `time`, `argparse.Namespace`, `httplib2` を使う。
+- `googleapiclient.discovery.build`, `oauth2client.client.OAuth2WebServerFlow`, `oauth2client.file.Storage`, `oauth2client.tools.run_flow` を使う。
+- `get_app_dir()` を実装する。PyInstallerで凍結実行中は `sys.executable` のディレクトリを返し、通常実行時はこのファイルのディレクトリを返す。
+- `load_googlecredential()` を実装する。まず通常の `importlib.import_module('googlecredential')` を試し、失敗したらアプリディレクトリとカレントディレクトリにある `googlecredential.py` を候補として `importlib.util.spec_from_file_location` で読み込む。見つからなければ `None` を返す。
+- `create_oauth_flags()` を実装する。GUIアプリでもブラウザ認証を行えるよう、`Namespace` で `auth_host_name='localhost'`, `auth_host_port=[8080, 8090]`, `logging_level='ERROR'`, `noauth_local_webserver=False` を返す。
+- `PCSCalendar` クラスを実装する。
+- `__init__(log)` ではログ出力先を保持する。
+- `get_credentials()` では、アプリディレクトリの `google-calendar.dat` を `Storage` に使う。既存認証情報がない、またはinvalidならログを出し、`googlecredential.py` から `client_id` と `client_secret` を読み込み、Calendarスコープ `https://www.googleapis.com/auth/calendar` の `OAuth2WebServerFlow` を作る。`run_flow` でブラウザ認証を行い、完了ログを出す。
+- `googlecredential.py` が見つからない場合は、exeと同じ場所に置くよう促すログを出して終了する。
+- 認証情報が得られたら `httplib2.Http()` を認証し、`build('calendar', 'v3', http=http)` でサービスを作る。
+- `has_credentials()` は認証情報の有無をbool相当で返す。
+- `get_calendars()` は `service.calendarList().list().execute()` でカレンダー一覧を取得し、`items` を返す。取得前にログへ `getting calendar list.` と出す。
+- `create_memo(id, year, month, day, memo)` は `YYYY-MM-DD` の日付文字列を作り、Google Calendarへ終日イベントを作成する。イベントは `summary='memo'`, `description=memo`, `start.date=date`, `end.date=date` とする。作成前に `creating memo YYYY-MM-DD` とログを出す。
+
+================================================================================
+3. pcsconfig.py
+================================================================================
+
+以下の仕様で、YAML設定管理モジュール `pcsconfig.py` を作成してください。
+
+- shebangとUTF-8 codingコメントを先頭に入れる。
+- `os`, `string`, `yaml` をインポートする。
+- `PCSConfig` クラスを作る。
+- 設定ファイル名はクラス変数または属性として `pcsconfig.yml` とする。
+- 内部設定辞書 `config` とログ出力先 `log` を持つ。
+- `__init__(log)` でログ出力先を受け取る。
+- `load()` では `pcsconfig.yml` が存在する場合、ログへ `loading config file` と出し、UTF-8で開いて `yaml.safe_load()` する。存在しない場合は `config file not found` とログを出す。
+- `get(name, value=None)` では、設定にキーがあればその値を返す。キーがなく、デフォルト値 `value` が指定されていれば `set(name, value)` で保存してから返す。なければ `None` を返す。
+- `set(name, value)` では、値が未設定または変更されている場合だけ内部辞書を更新し、`save()` を呼ぶ。
+- `save()` ではUTF-8で `pcsconfig.yml` を開き、`yaml.dump(..., encoding='utf-8', allow_unicode=True)` で保存する。
+
+================================================================================
+4. pcsdialog.py
+================================================================================
+
+以下の仕様で、TkinterのGUIモジュール `pcsdialog.py` を作成してください。
+
+- shebangとUTF-8 codingコメントを先頭に入れる。
+- `from inspect import FrameInfo` をインポートする。
+- `string`, `tkinter as tk`, `tkinter.scrolledtext`, `sys` を使う。
+- `PCSDialog` クラスを作り、アプリ名は `PomeCalSync` とする。
+- `__init__()` で `tk.Tk()` を作り、リサイズ不可にする。
+- 上部に白背景の `ScrolledText` ログ欄を高さ20で配置する。
+- その下に左右のフレームを置く。左側には `Google Calendars:` ラベル、単一選択の `Listbox` 高さ4、縦スクロールバーを配置する。
+- 右側には `Delete synced memo` のチェックボックスを置き、`tk.BooleanVar` で状態を管理する。
+- 右側に `Days out of sync:` ラベルと幅4のEntryを置き、保持日数を入力できるようにする。
+- 最下部に `Start Sync` ボタンと `Cancel/Finish` ボタンを横並びで配置する。Startは `self.start()`、Cancel/Finishは `self.cancel()` を呼ぶ。
+- `set_control(control)` で制御オブジェクトを保持する。
+- `start()` は `control.sync()` を呼ぶ。
+- `cancel()` は `control.finish()` を呼ぶ。
+- `get_tk()` はTkルートを返す。
+- `show()` は `mainloop()` を呼ぶ。
+- `append(text)` はログ欄の末尾にテキストと改行を追加し、末尾へスクロールし、`update_idletasks()` する。
+- `set_calendar_list(list)` はカレンダー一覧を保持し、Listboxを空にして各itemの `summary` を表示する。
+- `select_calendar(id)` は保持しているカレンダー一覧からID一致する要素を探し、そのindexをListboxで選択して表示位置へスクロールする。
+- `get_selected_calendar()` はListboxの選択状態から対応するカレンダーIDを返す。選択がない場合は `None` を返す。
+- `set_delete_memo(value)` と `get_delete_memo()` でチェックボックス状態を設定・取得する。
+- `set_days(value)` と `get_days()` でEntryの保持日数を設定・取得する。整数変換できない場合は3を返す。
+
+================================================================================
+5. setup.py
+================================================================================
+
+以下の仕様で、setuptools用の `setup.py` を作成してください。
+
+- `from setuptools import setup` を使う。
+- パッケージ名は `pomecalsync`、バージョンは `0.1` とする。
+- `py_modules` には `main`, `pcscalendar`, `pcsconfig`, `pcsdialog` を含める。
+- `install_requires` には `google-api-python-client`, `oauth2client`, `httplib2`, `PyYAML` を含める。
+- `extras_require` の `develop` には `pyinstaller` を含める。
+- `entry_points` では `gui_scripts` に `main = main:main` を登録する。`console_scripts` は空でよい。
+
+================================================================================
+6. googlecredential-sample.py
+================================================================================
+
+以下の仕様で、Google API認証情報のサンプルファイル `googlecredential-sample.py` を作成してください。
+
+- 先頭に `# rename this file as googlecredential.py` というコメントを入れる。
+- `client_id = 'YOUR_CLIENT_ID'` を定義する。
+- `client_secret = 'YOUR_CLIENT_SECRET'` を定義する。
+- 実際の認証情報は絶対に書かない。
+
+================================================================================
+7. googlecredential.py
+================================================================================
+
+以下の仕様で、ローカル実行用のGoogle API認証情報ファイル `googlecredential.py` を作成してください。
+
+- 先頭に `# rename this file as googlecredential.py` というコメントを入れる。
+- `client_id` と `client_secret` の2つの変数を定義する。
+- 値はユーザーがGoogle Cloud Consoleで取得したOAuthクライアントIDとクライアントシークレットを設定できるよう、プレースホルダーにする。
+- 例:
+  - `client_id = 'YOUR_CLIENT_ID'`
+  - `client_secret = 'YOUR_CLIENT_SECRET'`
+- 実際の秘密情報や既存環境の認証値は絶対に含めない。
+
+================================================================================
+8. hooks/rthook_tkinter.py
+================================================================================
+
+以下の仕様で、PyInstaller用のTkinterランタイムフック `hooks/rthook_tkinter.py` を作成してください。
+
+- `os` と `sys` をインポートする。
+- `base_dir` は、PyInstaller実行時の `sys._MEIPASS` があればそれを使い、なければ `sys.executable` のディレクトリを使う。
+- `base_dir` 配下の `_tcl_data` をTclライブラリ候補、`_tk_data` をTkライブラリ候補とする。
+- `_tcl_data` がディレクトリとして存在する場合、環境変数 `TCL_LIBRARY` に設定する。
+- `_tk_data` がディレクトリとして存在する場合、環境変数 `TK_LIBRARY` に設定する。
+
+================================================================================
+9. hooks/pre_find_module_path/hook-tkinter.py
+================================================================================
+
+以下の仕様で、PyInstaller用のTkinter pre-find-module-pathフック `hooks/pre_find_module_path/hook-tkinter.py` を作成してください。
+
+- `os` と `sys` をインポートする。
+- `pre_find_module_path(hook_api)` 関数を定義する。
+- `sys.base_prefix` 配下の `Lib` を標準ライブラリディレクトリとみなし、その下の `tkinter` ディレクトリが存在するか確認する。
+- 存在する場合は、`hook_api.search_dirs = [stdlib_dir]` としてTkinter探索先を標準ライブラリディレクトリに限定する。
+
+================================================================================
+10. hooks/hook-apiclient.py
+================================================================================
+
+以下の仕様で、PyInstaller用のgoogle-api-python-clientメタデータ収集フック `hooks/hook-apiclient.py` を作成してください。
+
+- `from PyInstaller.utils.hooks import copy_metadata` を使う。
+- `datas = copy_metadata('google-api-python-client')` を定義する。
+- 目的は、PyInstallerでビルドした実行ファイルにgoogle-api-python-clientのパッケージメタデータを含めること。
